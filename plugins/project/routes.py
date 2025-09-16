@@ -715,32 +715,30 @@ def redis_test():
         }
     }
 def format_amount_english(amount):
-    """Convert any Hindi amount text to English numbers"""
-    # If it's already a number, return as is
-    if str(amount).isdigit():
+    """Convert amount to English words without using audio_files dictionary"""
+    try:
+        # Extract number from any format
+        import re
+        
+        # If it's a string, try to extract digits
+        if isinstance(amount, str):
+            # First try to find digits
+            numbers = re.findall(r'\d+', str(amount))
+            if numbers:
+                amount = int(numbers[0])
+            elif amount.isdigit():
+                amount = int(amount)
+            else:
+                return str(amount)
+        
+        # Convert to English words using num2words (NOT audio_files)
+        from num2words import num2words
+        english_words = num2words(int(amount))
+        return english_words
+        
+    except Exception as e:
+        print(f"Error converting amount to English: {e}")
         return str(amount)
-    
-    # Create reverse mapping from Hindi to English
-    hindi_to_english = {}
-    for english_num, hindi_text in audio_files.items():
-        if english_num.isdigit() or english_num in ["1000", "2000", "5000", "10000", "100000", "1000000"]:
-            hindi_to_english[hindi_text] = english_num
-    
-    # Direct lookup for exact matches
-    amount_str = str(amount)
-    if amount_str in hindi_to_english:
-        return hindi_to_english[amount_str]
-    
-    # For complex amounts, try to extract numbers
-    import re
-    # Look for any digits in the string
-    numbers = re.findall(r'\d+', amount_str)
-    if numbers:
-        return numbers[0]  # Return first number found
-    
-    # If no conversion possible, return original
-    return str(amount)
-
 
 @router.get("/initial_message")
 def initial_message(request: Request):
