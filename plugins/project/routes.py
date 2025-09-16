@@ -799,7 +799,8 @@ def initial_message(request: Request):
         lender_name = str(input_collection.get("lender_name", "credgenics"))
         
         last_4_digits = loan_id[-4:] if len(loan_id) >= 4 else loan_id
-
+        due_amount = str(input_collection.get("due_amount", 0))
+        
         # CORRECTED: Simple initial message without num2words
         initial_msg = f"Hello {full_name}, I'm {agent_name} calling about your pending EMI of {due_amount} rupees. Can you make this payment today?"
     
