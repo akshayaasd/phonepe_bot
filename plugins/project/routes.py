@@ -714,6 +714,32 @@ def redis_test():
             "retrieved_dict": retrieved_dict
         }
     }
+def format_amount_english(amount):
+    """Convert any Hindi amount text to English numbers"""
+    # If it's already a number, return as is
+    if str(amount).isdigit():
+        return str(amount)
+    
+    # Create reverse mapping from Hindi to English
+    hindi_to_english = {}
+    for english_num, hindi_text in audio_files.items():
+        if english_num.isdigit() or english_num in ["1000", "2000", "5000", "10000", "100000", "1000000"]:
+            hindi_to_english[hindi_text] = english_num
+    
+    # Direct lookup for exact matches
+    amount_str = str(amount)
+    if amount_str in hindi_to_english:
+        return hindi_to_english[amount_str]
+    
+    # For complex amounts, try to extract numbers
+    import re
+    # Look for any digits in the string
+    numbers = re.findall(r'\d+', amount_str)
+    if numbers:
+        return numbers[0]  # Return first number found
+    
+    # If no conversion possible, return original
+    return str(amount)
 
 
 @router.get("/initial_message")
@@ -801,6 +827,8 @@ def initial_message(request: Request):
         last_4_digits = loan_id[-4:] if len(loan_id) >= 4 else loan_id
         due_amount = str(input_collection.get("due_amount", 0))
         
+        due_amount = format_amount_english(due_amount) if due_amount else ""
+
         # CORRECTED: Simple initial message without num2words
         initial_msg = f"Hello {full_name}, I'm {agent_name} calling about your pending EMI of {due_amount} rupees. Can you make this payment today?"
     
