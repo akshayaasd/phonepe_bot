@@ -1,0 +1,161 @@
+pipeline {
+
+    environment {
+
+        dockerImageName = 'gnanivb.azurecr.io/prod-aa005a8a6105'
+
+        deploymentName = 'prod-aa005a8a6105'
+
+        namespace = 'nlp'
+
+        resourceGroup = 'gnani-vb'
+
+        clusterName = 'gnanivb'
+
+        awskey = credentials('AWS-UI-CRED')
+
+        word_vector_location = ''
+    }
+
+    agent {
+        label 'nlp'
+    }
+
+    stages {
+        stage('Get word vector'){
+            when{
+                not{
+                    environment name: 'word_vector_location', value: null
+                }
+            }
+            steps{
+                script{
+                    sh '''
+                        aws s3 cp ${word_vector_location} .
+                        tar xvf $(basename ${word_vector_location})
+                        rm -rf $(basename ${word_vector_location})
+                    '''
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    withCredentials([azureServicePrincipal('AZURE-NPL-BOT')]) {
+                            sh 'az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET -t $AZURE_TENANT_ID'
+                    }
+                    sh 'az acr login --name gnanivb'
+                    dockerImage = docker.build "${dockerImageName}:v${BUILD_NUMBER}"
+                }
+            }
+            post{
+                success{
+                    echo "====++++Build Docker image executed successfully++++===="
+                }
+                failure{
+                    echo "====++++Build Docker image execution failed++++===="
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    sh 'docker push ${dockerImageName}:v${BUILD_NUMBER}'
+                }
+            }
+            post{
+                success{
+                    echo "====++++Docker Images is pushed to ACR++++===="
+                }
+                failure{
+                    echo "====++++Failed to Push to ACR Repo++++===="
+                }
+            }
+        }
+        stage('Deploy onto gnanivb cluster') {
+            steps {
+                script {
+                    withCredentials([azureServicePrincipal('gnanivb-service-user')]) {
+                        sh 'az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET -t $AZURE_TENANT_ID'
+                    }
+                    sh 'az account set --subscription b98fab9e-70ab-4b72-9836-d3bc85b8c2be'
+                    sh 'az aks get-credentials --resource-group ${resourceGroup} --name ${clusterName} -a'
+                    env.deploy = sh(script:"kubectl get deploy ${deploymentName} -n ${namespace}", returnStdout: true).trim()
+                    if ("${env.deploy}"){
+                        sh '''
+                            current_replicas=$(kubectl get -n ${namespace} deployments/${deploymentName} -o jsonpath='{.spec.replicas}')
+                            if [ ${current_replicas} = 0 ]; then
+                                echo 'repliacs are 0';
+                                kubectl set image -n ${namespace} deployments/${deploymentName} ${deploymentName}=${dockerImageName}:v${BUILD_NUMBER}
+                                sleep 5
+                                kubectl scale -n ${namespace} deployments/${deploymentName} --replicas=1;
+                            else
+                                echo 'replicas are not 0';
+                                kubectl set image -n ${namespace} deployments/${deploymentName} ${deploymentName}=${dockerImageName}:v${BUILD_NUMBER}
+                            fi
+                        '''
+                    }
+                    else{
+                        sh '''echo 'no deplyment found';
+                            exit 1'''
+                    }
+                }
+            }
+            post{
+                success{
+                    echo "====++++Successfully deployed onto gnanivb cluster++++===="
+                }
+                failure{
+                    echo "====++++Failed to deploy onto gnanivb cluster++++===="
+                }
+            }
+        }
+        stage('Wait for deployment status') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    sh '''
+                        deployment_status=$(kubectl rollout status deployment -n ${namespace} ${deploymentName})
+                        unavailable_replicas=$(kubectl get deployments.apps -n ${namespace} ${deploymentName} -o jsonpath='{.status.unavailableReplicas}')
+                        POD=$(kubectl get pod -l app=${deploymentName} -o jsonpath="{.items[0].metadata.name}" -n ${namespace})
+                        POD_STATUS=$(kubectl get pods --field-selector=status.phase=Running,metadata.name=$POD -o jsonpath="{.items[0].metadata.name}" -n ${namespace})
+                        if [ -n "${deployment_status}" ] && [ -z ${unavailable_replicas} ] && [ -n "${POD}" ] && [ -n "${POD_STATUS}" ]; then
+                            echo 'all good';
+                        else
+                            echo 'not good';
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+            post{
+                success{
+                    echo "====++++Successfully deployed onto gnanivb cluster++++===="
+                }
+                failure{
+                    echo "====++++Failed to deploy onto gnanivb cluster++++===="
+                }
+            }
+        }
+        stage('Email Check') {
+            steps {
+                echo "Sending Mail to Recepient"
+            }
+            post{
+                success{
+                    emailext body: '''$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS''', subject: '$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS!', recipientProviders: [culprits(), developers(), requestor()], attachLog: true
+                }
+                failure{
+                    emailext body: '''$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS:''', subject: '$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS!', recipientProviders: [culprits(), developers(), requestor()], attachLog: true
+                    }
+                }
+            }
+        }
+        post {
+            always {
+                cleanWs()
+                script {
+                    sh 'docker rmi ${dockerImageName}:v${BUILD_NUMBER}'
+                }
+            }
+        }
+    }

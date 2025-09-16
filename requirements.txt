@@ -1,0 +1,16 @@
+fastapi
+pytz
+uvicorn
+prometheus-fastapi-instrumentator
+sentry-sdk
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation
+opentelemetry-exporter-otlp
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-logging
+gunicorn
+redis
+python-dateutil
+num2words
+indic-numtowords==1.0.1
