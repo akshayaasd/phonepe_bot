@@ -801,11 +801,8 @@ def initial_message(request: Request):
         last_4_digits = loan_id[-4:] if len(loan_id) >= 4 else loan_id
 
         # CORRECTED: Simple initial message without num2words
-        if language == "english":
-            initial_msg = f"Hello {full_name}, I'm {agent_name} calling about your pending EMI of {due_amount} rupees. Can you make this payment today?"
-        else:
-            initial_msg = f"नमस्ते {full_name} जी, मैं {agent_name} बोल रही हूँ। आपकी {due_amount} रुपए की EMI के बारे में। क्या आप आज पेमेंट कर पाएँगे?"
-
+        initial_msg = f"Hello {full_name}, I'm {agent_name} calling about your pending EMI of {due_amount} rupees. Can you make this payment today?"
+    
         # CORRECTED: Only 6 fields that exist in MongoDB
         user_context = {
             "full_name": full_name,
