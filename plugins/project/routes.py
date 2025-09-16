@@ -1123,6 +1123,63 @@ def call_logic(bot_data):
     ntd = next_date - timedelta(hours=5,minutes=30)
     ntd = getISOFormat(ntd)
     return ntd, trigger_call
+
+#-----------------------------------------------------------------------------------------------------------------------------------#
+def extract_closure_reason(conversation_log):
+    """Extract closure reason from conversation"""
+    reasons = []
+    
+    for msg in conversation_log:
+        if msg.get('role') == 'user':
+            content = msg.get('content', '').lower()
+            
+            # Check for common reasons
+            if any(word in content for word in ['store', 'shop', 'business', 'बंद', 'closed']):
+                reasons.append("Business/Store closed")
+            elif any(word in content for word in ['money', 'पैसा', 'cash', 'funds', 'नहीं है']):
+                reasons.append("No money available")
+            elif any(word in content for word in ['sick', 'ill', 'hospital', 'बीमार']):
+                reasons.append("Medical emergency")
+            elif any(word in content for word in ['job', 'work', 'employment', 'नौकरी']):
+                reasons.append("Job loss/Work issues")
+            elif any(word in content for word in ['family', 'परिवार', 'emergency']):
+                reasons.append("Family emergency")
+    
+    return ", ".join(reasons) if reasons else "Not specified"
+
+def extract_partial_amount(conversation_log):
+    """Extract partial amount from conversation"""
+    import re
+    
+    for msg in conversation_log:
+        if msg.get('role') == 'user':
+            content = msg.get('content', '')
+            
+            # Look for numbers that could be amounts
+            numbers = re.findall(r'\b\d+\b', content)
+            for num in numbers:
+                if 100 <= int(num) <= 100000:  # Reasonable amount range
+                    return int(num)
+    
+    return 0  # No partial amount mentioned
+
+def extract_payment_commitment_date(conversation_log):
+    """Extract when user promises to pay"""
+    for msg in conversation_log:
+        if msg.get('role') == 'user':
+            content = msg.get('content', '').lower()
+            
+            if any(word in content for word in ['दो दिन', 'two day', '2 day']):
+                return (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+            elif any(word in content for word in ['कल', 'tomorrow', 'kal']):
+                return (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            elif any(word in content for word in ['एक हफ्ता', 'week', 'सप्ताह']):
+                return (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+            elif any(word in content for word in ['महीना', 'month', 'maheena']):
+                return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    
+    return ""
+
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def process_call_status_thread(bot_data):
     """
@@ -1179,38 +1236,53 @@ def process_call_status_thread(bot_data):
                 print(f"we have exception in date converstion :: {e} - {sender_id}")
             
             try:
-                    inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
-                    sender_id = inya_call_status_dict.get("customerCRTId", "")
-                    call_status = inya_call_status_dict.get("callStatus", "")
-                    
-                    # Fields that EXIST in your MongoDB
-                    sequence_number = bot_data.get("user_context", {}).get("sequence_number", 0)
-                    answered_seq = bot_data.get("user_context", {}).get("answered_seq", 0)
-                    call_sequence_mapping = bot_data.get("user_context", {}).get("call_sequence_mapping", {})
-                    input_date = bot_data.get("user_context", {}).get("input_date", "")
-                    full_name = bot_data.get("user_context", {}).get("full_name", "")
-                    agent_name = bot_data.get("user_context", {}).get("agent_name", "")
-                    lender_name = bot_data.get("user_context", {}).get("lender_name", "")
-                    due_amount = bot_data.get("user_context", {}).get("due_amount", "")
-                    language = bot_data.get("user_context", {}).get("language", "")
-                    product_description = bot_data.get("user_context", {}).get("product_description", "")
-                    loan_id = bot_data.get("user_context", {}).get("loan_id", "")
-                    last_4_digits = bot_data.get("user_context", {}).get("last_4_digits", "")
-                    
-                    # Fields that might exist based on your DB structure
-                    flow_id = bot_data.get("user_context", {}).get("flow_id", "")
-                    stage = bot_data.get("user_context", {}).get("stage", "")
-                    phone_number = bot_data.get("user_context", {}).get("phone_number", 0)
+                conversation_log = bot_data.get('conversation_log', [])
+                stage_code = bot_data.get('STAGE_CODE', 'DSCN')
+                
+                # CLOSURE ANALYTICS - Extract key metrics
+                closure_reason = extract_closure_reason(conversation_log)
+                closure_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+                partial_amount_agreed = extract_partial_amount(conversation_log)
+                payment_commitment_date = extract_payment_commitment_date(conversation_log)
+                
+                # Add closure analytics to bot_data
+                bot_data['closure_reason'] = closure_reason
+                bot_data['closure_time'] = closure_time
+                bot_data['partial_amount_agreed'] = partial_amount_agreed
+                bot_data['payment_commitment_date'] = payment_commitment_date
+                
+                logger.info(f"Closure Analytics - Reason: {closure_reason}, Partial Amount: {partial_amount_agreed}, Commitment Date: {payment_commitment_date}, sender_id={sender_id}", bot_data)
 
-
+                inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
+                sender_id = inya_call_status_dict.get("customerCRTId", "")
+                call_status = inya_call_status_dict.get("callStatus", "")
+                
+                # Fields that EXIST in your MongoDB
+                sequence_number = bot_data.get("user_context", {}).get("sequence_number", 0)
+                answered_seq = bot_data.get("user_context", {}).get("answered_seq", 0)
+                call_sequence_mapping = bot_data.get("user_context", {}).get("call_sequence_mapping", {})
+                input_date = bot_data.get("user_context", {}).get("input_date", "")
+                full_name = bot_data.get("user_context", {}).get("full_name", "")
+                agent_name = bot_data.get("user_context", {}).get("agent_name", "")
+                lender_name = bot_data.get("user_context", {}).get("lender_name", "")
+                due_amount = bot_data.get("user_context", {}).get("due_amount", "")
+                language = bot_data.get("user_context", {}).get("language", "")
+                product_description = bot_data.get("user_context", {}).get("product_description", "")
+                loan_id = bot_data.get("user_context", {}).get("loan_id", "")
+                last_4_digits = bot_data.get("user_context", {}).get("last_4_digits", "")
+                
+                # Fields that might exist based on your DB structure
+                flow_id = bot_data.get("user_context", {}).get("flow_id", "")
+                stage = bot_data.get("user_context", {}).get("stage", "")
+                phone_number = bot_data.get("user_context", {}).get("phone_number", 0)
 
             except Exception as e:
                 print(f"we have exception in usercontext :: {e} - {sender_id}")
+                
             inya_stage_code = bot_data.get('STAGE_CODE','')
-            # inserted_on = getISOFormat(inserted_on)
             logger.info(f"we have STAGE_CODE in else block from inya as :: {inya_stage_code} sender_id={sender_id} ", bot_data)
             
-                    # Call infrastructure data
+            # Call infrastructure data
             bot_data['callEndTime'] = callEndTime
             bot_data['callConnectedTime'] = callConnectedTime
             bot_data['callStartTime'] = callStartTime
@@ -1251,13 +1323,8 @@ def process_call_status_thread(bot_data):
             elif inya_call_status == "ANSWERED" and inya_stage_code == "RNR":
                 bot_data['STAGE_CODE'] = "DSCN"
                 bot_data['call_status'] = "ANSWERED"
-
-            
             
             tempDate = bot_data.get('tempDate', datetime.now())
-            # tempDate = datetime.strptime(str(tempDate), "%Y-%m-%d")
-            # tempDate = tempDate.strftime("%d/%m/%Y")
-            
             bot_data['tempDate'] = tempDate
             
             delete_unwanted_fields(bot_data)
@@ -1274,6 +1341,12 @@ def process_call_status_thread(bot_data):
             updated_data = get_requried_fields_to_update(bot_data)
             updated_data["next_trigger_date"] = next_trigger_date
             updated_data["trigger_call"] = trigger_call
+            
+            # Add closure analytics to updated_data for database storage
+            updated_data['closure_reason'] = bot_data.get('closure_reason', '')
+            updated_data['closure_time'] = bot_data.get('closure_time', '')
+            updated_data['partial_amount_agreed'] = bot_data.get('partial_amount_agreed', 0)
+            updated_data['payment_commitment_date'] = bot_data.get('payment_commitment_date', '')
             
             logger.info(f"updated_data is : {updated_data}", bot_data)
             bot_data.update(updated_data)
@@ -1316,6 +1389,7 @@ def process_call_status_thread(bot_data):
         
     
     return output_data
+
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def process_call_status(bot_data):
     logger.info("=============Entered call status function============", bot_data)
