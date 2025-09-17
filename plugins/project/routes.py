@@ -813,31 +813,64 @@ def initial_message(request: Request):
                 status = "data updation failed"
         logger.info(f"[{sender_id}]: Details condition in initial message endpoint: {status}")
 
-        # ONLY fields that exist in your MongoDB
         full_name = str(input_collection.get("full_name", ""))
-        agent_name = str(input_collection.get("agent_name", "alishba"))
-        due_amount = str(input_collection.get("due_amount", 0))
-        language = str(input_collection.get("language", "english")).lower()
-        product_description = str(input_collection.get("product_description", "merchant loan"))
+        agent_name = str(input_collection.get("agent_name", "riya"))  # Changed from alishba
+        lender_name = str(input_collection.get("lender_name", "phonepe"))
+        product_description = str(input_collection.get("product_description", "business loan"))
         loan_id = str(input_collection.get("loan_id", "1234"))
-        lender_name = str(input_collection.get("lender_name", "credgenics"))
         
+        # Financial data (exact DB field names)
+        due_amount = str(input_collection.get("due_amount", "0"))
+        due_date = str(input_collection.get("due_date", ""))
+        
+        # Language
+        language = str(input_collection.get("language", "english")).lower()
+        
+        # Calculate derivatives
         last_4_digits = loan_id[-4:] if len(loan_id) >= 4 else loan_id
-        due_amount = str(input_collection.get("due_amount", 0))
+        c_date_time = datetime.now(IST)
+        todays_date = c_date_time.strftime("%Y-%m-%d")
         
-        due_amount = format_amount_english(due_amount) if due_amount else ""
+        # Calculate due days from due_date and today
+        due_days = str(calculate_due_date_difference(due_date, todays_date))
+        
+        # Convert amounts and dates for both languages
+        due_amount_eng = format_amount_english(due_amount) if due_amount else ""
+        due_amount_hin = due_amount_audio(due_amount) if due_amount else ""
+        due_date_eng = due_date_format(due_date, "english") if due_date else ""
+        due_date_hin = due_date_format(due_date, "hindi") if due_date else ""
+        
+        initial_msg = f"hello, I am {{agent_name}} calling from phone pay. Am I speaking with {{full_name}}?"
 
-        # CORRECTED: Simple initial message without num2words
-        initial_msg = f"Hello {full_name}, I'm {agent_name} calling about your pending EMI of {due_amount} rupees. Can you make this payment today?"
-    
-        # CORRECTED: Only 6 fields that exist in MongoDB
+        # ONLY use variables that exist in your MongoDB
         user_context = {
+            # Direct DB fields
             "full_name": full_name,
             "agent_name": agent_name,
             "lender_name": lender_name,
             "product_description": product_description,
+            "loan_id": loan_id,
+            "due_amount": due_amount,
+            "due_date": due_date,
+            "language": language,
+            "phone_number": phone_number,
+            
+            # Calculated fields
             "last_4_digits": last_4_digits,
-            "due_amount": due_amount
+            "due_amount_eng": due_amount_eng,
+            "due_amount_hin": due_amount_hin,
+            "due_date_eng": due_date_eng,
+            "due_date_hin": due_date_hin,
+            "due_days": due_days,
+            "todays_date": todays_date,
+            
+            # Existing tracking fields from DB
+            "sequence_number": input_collection.get("sequence_number", 0),
+            "answered_seq": input_collection.get("answered_seq", 0),
+            "call_sequence_mapping": input_collection.get("call_sequence_mapping", {}),
+            "input_date": input_collection.get("input_date", ""),
+            "flow_id": flow_id,
+            "stage": "initial_message"
         }
 
         # ADD THIS MISSING PART:
@@ -1207,7 +1240,7 @@ def extract_payment_commitment_date(conversation_log):
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def process_call_status_thread(bot_data):
     """
-    process_call_status - to add post conversation logic
+    process_call_status - to add post conversation logic - UPDATED to use only MongoDB fields
     """
     logger.info(f"process_call_status_thread is : {bot_data}", bot_data)
     _id = bot_data.get("_id")
@@ -1222,7 +1255,7 @@ def process_call_status_thread(bot_data):
         callConnectedTime = ""
         bot_data['callConnectedTime'] = callConnectedTime
     
-    callConnectedTime_a = bot_data["callConnectedTime"]
+    callConnectedTime_a = bot_data.get("callConnectedTime", "")
     if callConnectedTime_a in ["None", None, " ", ""]:
         callConnectedTime = ""
         bot_data['callConnectedTime'] = callConnectedTime
@@ -1257,13 +1290,13 @@ def process_call_status_thread(bot_data):
                 callConnectedTime = converted_fields.get("callConnectedTime", "")
                 callEndTime = converted_fields.get("callEndTime", "")
             except Exception as e:
-                print(f"we have exception in date converstion :: {e} - {sender_id}")
+                logger.error(f"Exception in date conversion :: {e} - {sender_id}")
             
             try:
                 conversation_log = bot_data.get('conversation_log', [])
                 stage_code = bot_data.get('STAGE_CODE', 'DSCN')
                 
-                # CLOSURE ANALYTICS - Extract key metrics
+                # CLOSURE ANALYTICS - Extract key metrics (these fields exist in MongoDB)
                 closure_reason = extract_closure_reason(conversation_log)
                 closure_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
                 partial_amount_agreed = extract_partial_amount(conversation_log)
@@ -1281,27 +1314,54 @@ def process_call_status_thread(bot_data):
                 sender_id = inya_call_status_dict.get("customerCRTId", "")
                 call_status = inya_call_status_dict.get("callStatus", "")
                 
-                # Fields that EXIST in your MongoDB
-                sequence_number = bot_data.get("user_context", {}).get("sequence_number", 0)
-                answered_seq = bot_data.get("user_context", {}).get("answered_seq", 0)
-                call_sequence_mapping = bot_data.get("user_context", {}).get("call_sequence_mapping", {})
-                input_date = bot_data.get("user_context", {}).get("input_date", "")
-                full_name = bot_data.get("user_context", {}).get("full_name", "")
-                agent_name = bot_data.get("user_context", {}).get("agent_name", "")
-                lender_name = bot_data.get("user_context", {}).get("lender_name", "")
-                due_amount = bot_data.get("user_context", {}).get("due_amount", "")
-                language = bot_data.get("user_context", {}).get("language", "")
-                product_description = bot_data.get("user_context", {}).get("product_description", "")
-                loan_id = bot_data.get("user_context", {}).get("loan_id", "")
-                last_4_digits = bot_data.get("user_context", {}).get("last_4_digits", "")
+                # Extract ONLY MongoDB fields from user_context
+                user_context = bot_data.get("user_context", {})
                 
-                # Fields that might exist based on your DB structure
-                flow_id = bot_data.get("user_context", {}).get("flow_id", "")
-                stage = bot_data.get("user_context", {}).get("stage", "")
-                phone_number = bot_data.get("user_context", {}).get("phone_number", 0)
+                # Direct MongoDB fields that exist in your database
+                full_name = user_context.get("full_name", "")
+                agent_name = user_context.get("agent_name", "riya")  # Changed from alishba
+                lender_name = user_context.get("lender_name", "phonepe")
+                product_description = user_context.get("product_description", "merchant loan")
+                loan_id = user_context.get("loan_id", "")
+                due_amount = user_context.get("due_amount", "")
+                due_date = user_context.get("due_date", "")  # This exists in MongoDB
+                language = user_context.get("language", "english")
+                phone_number = user_context.get("phone_number", phone_number)
+                
+                # MongoDB tracking fields
+                sequence_number = user_context.get("sequence_number", 0)
+                answered_seq = user_context.get("answered_seq", 0)
+                call_sequence_mapping = user_context.get("call_sequence_mapping", {})
+                input_date = user_context.get("input_date", "")
+                flow_id = user_context.get("flow_id", "")
+                stage = user_context.get("stage", "")
+                
+                # Calculate derived fields (not stored separately in MongoDB)
+                last_4_digits = loan_id[-4:] if len(loan_id) >= 4 else loan_id
+                c_date_time = datetime.now(IST)
+                todays_date = c_date_time.strftime("%Y-%m-%d")
+                due_days = str(calculate_due_date_difference(due_date, todays_date)) if due_date else "0"
 
             except Exception as e:
-                print(f"we have exception in usercontext :: {e} - {sender_id}")
+                logger.error(f"Exception in usercontext :: {e} - {sender_id}")
+                # Set default values if extraction fails
+                full_name = ""
+                agent_name = "riya"
+                lender_name = "phonepe"
+                product_description = "merchant loan"
+                loan_id = ""
+                due_amount = ""
+                due_date = ""
+                language = "english"
+                sequence_number = 0
+                answered_seq = 0
+                call_sequence_mapping = {}
+                input_date = ""
+                flow_id = ""
+                stage = ""
+                last_4_digits = ""
+                due_days = "0"
+                todays_date = datetime.now(IST).strftime("%Y-%m-%d")
                 
             inya_stage_code = bot_data.get('STAGE_CODE','')
             logger.info(f"we have STAGE_CODE in else block from inya as :: {inya_stage_code} sender_id={sender_id} ", bot_data)
@@ -1316,7 +1376,7 @@ def process_call_status_thread(bot_data):
             bot_data['ringingTime'] = ringingTime
             bot_data['setup_time'] = setupTime
 
-            # Fields that EXIST in your MongoDB
+            # Update bot_data with ONLY MongoDB fields
             bot_data['sequence_number'] = sequence_number + 1
             bot_data['answered_seq'] = answered_seq
             bot_data['call_sequence_mapping'] = call_sequence_mapping
@@ -1326,18 +1386,22 @@ def process_call_status_thread(bot_data):
             bot_data['agent_name'] = agent_name
             bot_data['lender_name'] = lender_name
             bot_data['due_amount'] = due_amount
+            bot_data['due_date'] = due_date  # This exists in MongoDB
             bot_data['product_description'] = product_description
             bot_data['loan_id'] = loan_id
+            bot_data['phone_number'] = phone_number
+            bot_data['flow_id'] = flow_id
+            bot_data['stage'] = stage
+            
+            # Calculated fields (not stored separately but used for processing)
             bot_data['last_4_digits'] = last_4_digits
-
-            # Optional fields that might exist
-            bot_data['flow_id'] = flow_id if 'flow_id' in locals() else ""
-            bot_data['stage'] = stage if 'stage' in locals() else ""
-            bot_data['phone_number'] = phone_number if 'phone_number' in locals() else 0
+            bot_data['due_days'] = due_days
+            bot_data['todays_date'] = todays_date
 
             inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
             inya_call_status = inya_call_status_dict.get("callStatus", "")                
             
+            # Stage code logic
             if setupTime == 0:
                 bot_data['STAGE_CODE'] = "RNR"
                 bot_data['call_status'] = "NO ANSWER"
@@ -1348,25 +1412,31 @@ def process_call_status_thread(bot_data):
                 bot_data['STAGE_CODE'] = "DSCN"
                 bot_data['call_status'] = "ANSWERED"
             
-            tempDate = bot_data.get('tempDate', datetime.now())
+            # Handle tempDate field (exists in MongoDB)
+            tempDate = bot_data.get('tempDate', datetime.now().strftime("%d/%m/%Y"))
             bot_data['tempDate'] = tempDate
             
+            # Clean unwanted fields
             delete_unwanted_fields(bot_data)
+            
             try:
                 call_sequence_update(bot_data)
             except Exception as e:
-                logger.info(f"Exception in call_sequence_update try is : {e}", bot_data)
+                logger.error(f"Exception in call_sequence_update: {e}", bot_data)
             
+            # Calculate next trigger logic
             next_trigger_date, trigger_call = call_logic(bot_data)
             logger.info(f"next_trigger_date and trigger_call = {next_trigger_date} :: {trigger_call} :: sender_id={sender_id} ", bot_data)
           
             bot_data["next_trigger_date"] = next_trigger_date
             bot_data["trigger_call"] = trigger_call
+            
+            # Get fields to update with only MongoDB fields
             updated_data = get_requried_fields_to_update(bot_data)
             updated_data["next_trigger_date"] = next_trigger_date
             updated_data["trigger_call"] = trigger_call
             
-            # Add closure analytics to updated_data for database storage
+            # Add closure analytics to updated_data for database storage (these fields exist in MongoDB)
             updated_data['closure_reason'] = bot_data.get('closure_reason', '')
             updated_data['closure_time'] = bot_data.get('closure_time', '')
             updated_data['partial_amount_agreed'] = bot_data.get('partial_amount_agreed', 0)
@@ -1374,45 +1444,115 @@ def process_call_status_thread(bot_data):
             
             logger.info(f"updated_data is : {updated_data}", bot_data)
             bot_data.update(updated_data)
-            logger.info(f"check logs |  {bot_data} ---- ", bot_data)
+            logger.info(f"check logs | {bot_data} ---- ", bot_data)
+            
+            # Update MongoDB with only existing fields
             res_cust = mongo_db.mongo_update(col_type = "input", record=updated_data, upd_cond = {"sender_id":sender_id})
             logger.info(f"check logs | res_cust --- {res_cust} --{sender_id}--{phone_number}--- ", bot_data)
             
+            # Clean up _id field
             if "_id" in bot_data:
                 del bot_data['_id']
             
+            # Handle call_date to tempDate conversion (both exist in MongoDB)
             if "call_date" in bot_data:
                 bot_data['tempDate'] = bot_data['call_date']
             
-            res_data_rep = mongo_db.mongo_file_count(col_type = "report",q1 = {"sender_id":sender_id}) 
+            # Check report data
+            res_data_rep = mongo_db.mongo_file_count(col_type = "report", q1 = {"sender_id":sender_id}) 
             logger.info(f"{sender_id} has updating details as {res_data_rep}", bot_data)
 
+            # SMS logic for PTP stage codes
             stage_code = bot_data["STAGE_CODE"]
-            env="prod"
+            env = "prod"
             if stage_code in ["PTP"] and env in ["prod"]:
                 try:
-                    t1 = ThreadWithReturnValue(target=sms, args=(phone_number,bot_data))
+                    t1 = ThreadWithReturnValue(target=sms, args=(phone_number, bot_data))
                     t1.start()
                     sms_response = t1.join()
                     bot_data['sms_response'] = sms_response
                 except Exception as e:
                     sms_response = f"sms error --------------------> {e}"
+                    logger.error(f"SMS error: {e}")
             
+            # Handle error stage codes
             inya_error = bot_data['STAGE_CODE']
             if inya_error in ["ERROR"]:
                 logger.info(f"inya_error sender id as {sender_id} --- {inya_error}", bot_data)
-            if res_data_rep in ["",None, {}, False,0] and inya_error not in ["ERROR"]:
-                res_report = mongo_db.mongo_insert( col_type = "output", record = bot_data)
+                
+            # Insert to appropriate collection based on conditions
+            if res_data_rep in ["", None, {}, False, 0] and inya_error not in ["ERROR"]:
+                res_report = mongo_db.mongo_insert(col_type = "output", record = bot_data)
             else:
-                res_report = mongo_db.mongo_insert( col_type = "reject", record = bot_data)
-                logger.info(f"check logs | reject db ---- {res_report}  ---- ", bot_data)
+                res_report = mongo_db.mongo_insert(col_type = "reject", record = bot_data)
+                logger.info(f"check logs | reject db ---- {res_report} ---- ", bot_data)
             
             logger.info(f"check logs | Call Status ---- DB updates {res_cust} | {res_report} ---- {sender_id}", bot_data)
+            
     except Exception as e:
-        logger.info(f"check logs | Call Status ---- Error in updating collections-----> {e}, {sender_id}", bot_data)
+        logger.error(f"check logs | Call Status ---- Error in updating collections-----> {e}, {sender_id}", bot_data)
         
-    
     return output_data
+
+def get_requried_fields_to_update(bot_data):
+    """Updated to include only MongoDB fields"""
+    logger.info(f"get_requried_fields_to_update input: {bot_data}")
+    
+    fields_to_update = {}
+    inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
+    sender_id = inya_call_status_dict.get("customerCRTId", "")
+    call_status = inya_call_status_dict.get("callStatus", "")
+    
+    # Get existing MongoDB fields
+    sequence_number = bot_data.get('sequence_number', 0)
+    answered_seq = bot_data.get('answered_seq', 0)
+    no_answer_seq = bot_data.get('no_answer_seq', 0)
+    last_triggered_date = bot_data.get("user_context",{}).get("last_triggered_date","")
+    
+    if call_status in ['NO ANSWER', 'BUSY', 'FAILED']:
+        answered = False
+    else:
+        answered = True
+        
+    # Only MongoDB fields
+    fields_to_update["sequence_number"] = sequence_number
+    fields_to_update['last_triggered_date'] = last_triggered_date
+    fields_to_update['call_initiated'] = bot_data.get("call_initiated", True)
+    fields_to_update['call_comp_flag'] = bot_data.get('call_comp_flag', 'no')
+    fields_to_update['setupTime'] = bot_data.get('setup_time', 0)
+    
+    call_duration = timedelta(seconds=bot_data.get('setup_time', 0))
+    fields_to_update['call_duration'] = str(call_duration)
+    fields_to_update['call_status'] = call_status
+    fields_to_update['sts'] = call_status
+    fields_to_update['customerCRTId'] = bot_data.get('conversation_id')
+    fields_to_update['sender_id'] = bot_data.get('conversation_id')
+    fields_to_update['call_uid'] = bot_data.get('conversation_id')
+    fields_to_update['conversation_log'] = bot_data.get('conversation_log')
+    fields_to_update['call_sequence_mapping'] = bot_data.get('call_sequence_mapping', {})
+    fields_to_update['flow_id'] = bot_data.get("flow_id", "")
+    fields_to_update['language'] = bot_data.get("language", "")
+    
+    # MongoDB user data fields
+    fields_to_update['full_name'] = bot_data.get('full_name', '')
+    fields_to_update['agent_name'] = bot_data.get('agent_name', 'riya')
+    fields_to_update['lender_name'] = bot_data.get('lender_name', 'phonepe')
+    fields_to_update['product_description'] = bot_data.get('product_description', 'merchant loan')
+    fields_to_update['loan_id'] = bot_data.get('loan_id', '')
+    fields_to_update['due_amount'] = bot_data.get('due_amount', '')
+    fields_to_update['due_date'] = bot_data.get('due_date', '')
+    fields_to_update['phone_number'] = bot_data.get('phone_number', 0)
+    fields_to_update['stage'] = bot_data.get('stage', '')
+    
+    if answered:
+        fields_to_update["answered_seq"] = answered_seq + 1
+        fields_to_update['STAGE_CODE'] = bot_data.get('STAGE_CODE', 'DSCN')
+    else:
+        fields_to_update['STAGE_CODE'] = "RNR"
+        fields_to_update["no_answer_seq"] = no_answer_seq + 1
+        
+    logger.info(f"get_requried_fields_to_update output: {fields_to_update}")
+    return fields_to_update
 
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def process_call_status(bot_data):
