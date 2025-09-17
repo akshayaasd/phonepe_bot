@@ -1183,64 +1183,358 @@ def call_logic(bot_data):
 
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def extract_closure_reason(conversation_log):
-    """Extract closure reason from conversation"""
+    """Extract closure reason from conversation based on user responses - Enhanced for Business Loans"""
     reasons = []
     
     for msg in conversation_log:
         if msg.get('role') == 'user':
-            content = msg.get('content', '').lower()
+            content = msg.get('content', '').lower().strip()
             
-            # Check for common reasons
-            if any(word in content for word in ['store', 'shop', 'business', 'बंद', 'closed']):
-                reasons.append("Business/Store closed")
-            elif any(word in content for word in ['money', 'पैसा', 'cash', 'funds', 'नहीं है']):
-                reasons.append("No money available")
-            elif any(word in content for word in ['sick', 'ill', 'hospital', 'बीमार']):
-                reasons.append("Medical emergency")
-            elif any(word in content for word in ['job', 'work', 'employment', 'नौकरी']):
-                reasons.append("Job loss/Work issues")
-            elif any(word in content for word in ['family', 'परिवार', 'emergency']):
-                reasons.append("Family emergency")
+            # Store/Business Closure
+            if any(word in content for word in [
+                'store closed', 'shop closed', 'business closed', 'दुकान बंद', 'स्टोर बंद',
+                'बंद है', 'closed', 'shutdown', 'band hai', 'दुकान', 'store', 'shop'
+            ]):
+                reasons.append("Store Closed")
+                
+            # Financial Issues - No Money
+            elif any(word in content for word in [
+                'no money', 'पैसा नहीं', 'cash नहीं', 'funds नहीं', 'paisa nahi', 
+                'money tight', 'cash tight', 'financial problem', 'पैसों की कमी',
+                'rupee नहीं', 'amount नहीं', 'balance नहीं', 'broke', 'empty account'
+            ]):
+                reasons.append("No Money Available")
+                
+            # Medical Emergency
+            elif any(word in content for word in [
+                'sick', 'ill', 'hospital', 'बीमार', 'medical', 'health', 'doctor',
+                'treatment', 'operation', 'इलाज', 'medicine', 'दवाई', 'emergency',
+                'accident', 'injury', 'चोट', 'patient', 'मरीज'
+            ]):
+                reasons.append("Medical Emergency")
+                
+            # Business Slowdown
+            elif any(word in content for word in [
+                'business slow', 'sales down', 'no customers', 'ग्राहक नहीं', 
+                'market slow', 'business kam', 'dhanda slow', 'income kam',
+                'कमाई नहीं', 'profit नहीं', 'loss', 'नुकसान', 'recession'
+            ]):
+                reasons.append("Slow Business")
+                
+            # Family Issues/Emergency
+            elif any(word in content for word in [
+                'family emergency', 'परिवार', 'family problem', 'घर की समस्या',
+                'urgent family', 'marriage', 'शादी', 'death', 'मृत्यु', 'accident family'
+            ]):
+                reasons.append("Family Emergency")
+                
+            # Technical/Pending Issues
+            elif any(word in content for word in [
+                'pending issue', 'technical problem', 'app not working', 'system issue',
+                'bank problem', 'payment gateway', 'server down', 'internet issue'
+            ]):
+                reasons.append("Technical Issue")
+                
+            # Dispute/Fraud Claims
+            elif any(word in content for word in [
+                'fraud', 'fake loan', 'नकली', 'scam', 'dispute', 'not taken',
+                'never applied', 'unauthorized', 'wrong loan', 'galat loan'
+            ]):
+                reasons.append("Loan Dispute")
+                
+            # Employment Issues
+            elif any(word in content for word in [
+                'job loss', 'नौकरी चली गई', 'unemployed', 'बेरोजगार', 'salary नहीं',
+                'company closed', 'fired', 'terminated', 'work नहीं', 'income stopped'
+            ]):
+                reasons.append("Employment Issue")
+                
+            # Already Paid Claims
+            elif any(word in content for word in [
+                'already paid', 'पहले से दिया', 'payment done', 'cleared', 
+                'settled', 'paid yesterday', 'paid today', 'भुगतान किया'
+            ]):
+                reasons.append("Claims Already Paid")
+                
+            # Direct Refusal
+            elif any(word in content for word in [
+                'won\'t pay', 'नहीं दूंगा', 'cannot pay', 'refuse to pay', 
+                'नहीं देना', 'नहीं कर सकता', 'मना', 'will not pay'
+            ]):
+                reasons.append("Direct Refusal")
+                
+            # Natural Calamity
+            elif any(word in content for word in [
+                'flood', 'बाढ़', 'earthquake', 'भूकंप', 'cyclone', 'storm',
+                'natural disaster', 'calamity', 'आपदा', 'weather problem'
+            ]):
+                reasons.append("Natural Calamity")
+                
+            # Wrong Number
+            elif any(word in content for word in [
+                'wrong number', 'गलत नंबर', 'not my loan', 'मेरा loan नहीं',
+                'don\'t know', 'never heard', 'कभी नहीं सुना'
+            ]):
+                reasons.append("Wrong Number")
     
-    return ", ".join(reasons) if reasons else "Not specified"
+    # Remove duplicates and return
+    unique_reasons = list(dict.fromkeys(reasons))  # Preserves order
+    return ", ".join(unique_reasons) if unique_reasons else "Not Specified"
 
 def extract_partial_amount(conversation_log):
-    """Extract partial amount from conversation"""
+    """Extract partial amount mentioned by user from conversation - Enhanced Logic"""
     import re
     
-    for msg in conversation_log:
+    # Look for amounts in reverse chronological order (latest first)
+    for msg in reversed(conversation_log):
         if msg.get('role') == 'user':
-            content = msg.get('content', '')
+            content = msg.get('content', '').strip()
             
-            # Look for numbers that could be amounts
+            # Extract all numbers from the message
             numbers = re.findall(r'\b\d+\b', content)
+            
             for num in numbers:
-                if 100 <= int(num) <= 100000:  # Reasonable amount range
-                    return int(num)
+                try:
+                    amount = int(num)
+                    # Business loan partial amount range (₹500 to ₹50,000)
+                    if 500 <= amount <= 50000:
+                        return amount
+                except ValueError:
+                    continue
+                    
+            # Check for percentage-based partial payments
+            percentage_match = re.search(r'(\d+)\s*%', content.lower())
+            if percentage_match:
+                percentage = int(percentage_match.group(1))
+                # Return percentage as indicator (1-100)
+                if 1 <= percentage <= 100:
+                    return percentage * 100  # Store as multiplied value for identification
+            
+            # Check for fraction-based partial payments
+            content_lower = content.lower()
+            if any(phrase in content_lower for phrase in [
+                'half', 'आधा', 'adha', '50%', 'fifty percent',
+                'आधी रकम', 'half amount'
+            ]):
+                return -1  # Special indicator for half payment
+                
+            elif any(phrase in content_lower for phrase in [
+                'quarter', 'चौथाई', 'one fourth', '25%', 'twenty five percent'
+            ]):
+                return -2  # Special indicator for quarter payment
+                
+            elif any(phrase in content_lower for phrase in [
+                'some amount', 'कुछ रकम', 'partial', 'थोड़ा सा', 'little bit',
+                'जो हो सके', 'whatever possible', 'कम से कम'
+            ]):
+                return 1  # Indicates partial payment mentioned but amount not specified
+                
+            # Check for range amounts (e.g., "2000 to 3000", "2-3 thousand")
+            range_match = re.search(r'(\d+)\s*(?:to|से|\-)\s*(\d+)', content)
+            if range_match:
+                lower_amount = int(range_match.group(1))
+                upper_amount = int(range_match.group(2))
+                avg_amount = (lower_amount + upper_amount) // 2
+                if 500 <= avg_amount <= 50000:
+                    return avg_amount
     
     return 0  # No partial amount mentioned
 
+
 def extract_payment_commitment_date(conversation_log):
-    """Extract when user promises to pay"""
-    for msg in conversation_log:
-        if msg.get('role') == 'user':
-            content = msg.get('content', '').lower()
-            
-            if any(word in content for word in ['दो दिन', 'two day', '2 day']):
-                return (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
-            elif any(word in content for word in ['कल', 'tomorrow', 'kal']):
-                return (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-            elif any(word in content for word in ['एक हफ्ता', 'week', 'सप्ताह']):
-                return (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-            elif any(word in content for word in ['महीना', 'month', 'maheena']):
-                return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    """Extract when user promises to pay from conversation - Enhanced with Indian context"""
+    from datetime import datetime, timedelta
+    import re
     
-    return ""
+    current_date = datetime.now(IST)
+    
+    # Look for dates in reverse chronological order (latest commitment first)
+    for msg in reversed(conversation_log):
+        if msg.get('role') == 'user':
+            content = msg.get('content', '').lower().strip()
+            
+            # Immediate commitments
+            if any(word in content for word in [
+                'today', 'आज', 'aaj', 'right now', 'अभी', 'abhi',
+                'immediately', 'तुरंत', 'this moment', 'अभी तुरंत'
+            ]):
+                return current_date.strftime("%Y-%m-%d")
+                
+            # Tomorrow commitments
+            elif any(word in content for word in [
+                'tomorrow', 'कल', 'kal', 'next day', 'अगला दिन'
+            ]):
+                return (current_date + timedelta(days=1)).strftime("%Y-%m-%d")
+                
+            # Day after tomorrow
+            elif any(word in content for word in [
+                'day after tomorrow', 'परसों', 'parso', 'दो दिन बाद'
+            ]):
+                return (current_date + timedelta(days=2)).strftime("%Y-%m-%d")
+                
+            # Specific day commitments
+            elif any(word in content for word in [
+                '2 day', 'दो दिन', 'two day', '2 days later'
+            ]):
+                return (current_date + timedelta(days=2)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                '3 day', 'तीन दिन', 'three day', '3 days later'
+            ]):
+                return (current_date + timedelta(days=3)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                '4 day', 'चार दिन', 'four day', '4 days later'
+            ]):
+                return (current_date + timedelta(days=4)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                '5 day', 'पांच दिन', 'five day', '5 days later'
+            ]):
+                return (current_date + timedelta(days=5)).strftime("%Y-%m-%d")
+                
+            # Week-based commitments
+            elif any(word in content for word in [
+                'एक हफ्ता', 'one week', 'week', 'सप्ताह', '7 day', 'seven day'
+            ]):
+                return (current_date + timedelta(days=7)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                'next week', 'अगले हफ्ते', 'coming week', 'आने वाले हफ्ते'
+            ]):
+                return (current_date + timedelta(days=7)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                'two week', 'दो हफ्ते', '2 week', 'fifteen day', 'पंद्रह दिन'
+            ]):
+                return (current_date + timedelta(days=14)).strftime("%Y-%m-%d")
+                
+            # Month-based commitments
+            elif any(word in content for word in [
+                'महीना', 'month', 'maheena', '30 day', 'thirty day'
+            ]):
+                return (current_date + timedelta(days=30)).strftime("%Y-%m-%d")
+                
+            elif any(word in content for word in [
+                'next month', 'अगले महीने', 'coming month', 'आने वाले महीने'
+            ]):
+                return (current_date + timedelta(days=30)).strftime("%Y-%m-%d")
+                
+            # Festival/Event based (Indian context)
+            elif any(word in content for word in [
+                'salary day', 'तनख्वाह का दिन', 'salary date', 'pay day',
+                'month end', 'महीने का अंत'
+            ]):
+                # Assume end of current month
+                next_month = current_date.replace(day=28) + timedelta(days=4)
+                month_end = next_month - timedelta(days=next_month.day)
+                return month_end.strftime("%Y-%m-%d")
+                
+            # Specific date patterns
+            # DD/MM/YYYY or DD-MM-YYYY
+            date_match = re.search(r'\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\b', content)
+            if date_match:
+                try:
+                    day, month, year = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
+                    if 1 <= day <= 31 and 1 <= month <= 12 and 2024 <= year <= 2026:
+                        specific_date = datetime(year, month, day)
+                        return specific_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+                    
+            # DD Month YYYY (English months)
+            month_match = re.search(r'\b(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b', content)
+            if month_match:
+                try:
+                    day = int(month_match.group(1))
+                    month_name = month_match.group(2)
+                    month_map = {
+                        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
+                        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+                    }
+                    month_num = month_map.get(month_name)
+                    year = current_date.year
+                    if month_num and 1 <= day <= 31:
+                        specific_date = datetime(year, month_num, day)
+                        # If date is in the past, assume next year
+                        if specific_date < current_date:
+                            specific_date = datetime(year + 1, month_num, day)
+                        return specific_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+                    
+            # Hindi months
+            hindi_month_match = re.search(r'\b(\d{1,2})\s+(जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर)\b', content)
+            if hindi_month_match:
+                try:
+                    day = int(hindi_month_match.group(1))
+                    hindi_month = hindi_month_match.group(2)
+                    hindi_month_map = {
+                        'जनवरी': 1, 'फरवरी': 2, 'मार्च': 3, 'अप्रैल': 4, 'मई': 5, 'जून': 6,
+                        'जुलाई': 7, 'अगस्त': 8, 'सितंबर': 9, 'अक्टूबर': 10, 'नवंबर': 11, 'दिसंबर': 12
+                    }
+                    month_num = hindi_month_map.get(hindi_month)
+                    year = current_date.year
+                    if month_num and 1 <= day <= 31:
+                        specific_date = datetime(year, month_num, day)
+                        # If date is in the past, assume next year
+                        if specific_date < current_date:
+                            specific_date = datetime(year + 1, month_num, day)
+                        return specific_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+                    
+            # Relative numeric days
+            days_match = re.search(r'(\d{1,2})\s*day', content)
+            if days_match:
+                try:
+                    days = int(days_match.group(1))
+                    if 1 <= days <= 90:  # Within 3 months
+                        return (current_date + timedelta(days=days)).strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+    
+    return ""  # No commitment date mentioned
+
+def calculate_due_date_difference(due_date_str, today_date_str):
+    """Calculate difference between due date and today - Enhanced with error handling"""
+    try:
+        # Handle different date formats
+        date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"]
+        
+        due_date = None
+        today_date = None
+        
+        # Parse due date
+        for fmt in date_formats:
+            try:
+                due_date = datetime.strptime(due_date_str, fmt)
+                break
+            except ValueError:
+                continue
+        
+        # Parse today date
+        for fmt in date_formats:
+            try:
+                today_date = datetime.strptime(today_date_str, fmt)
+                break
+            except ValueError:
+                continue
+        
+        if due_date and today_date:
+            difference = (today_date - due_date).days
+            return max(0, difference)  # Don't return negative days
+        
+        return 0
+    except Exception as e:
+        print(f"Error calculating date difference: {e}")
+        return 0
+
 
 #-----------------------------------------------------------------------------------------------------------------------------------#
 def process_call_status_thread(bot_data):
     """
-    process_call_status - to add post conversation logic - UPDATED to use only MongoDB fields
+    process_call_status - to add post conversation logic - UPDATED to use only MongoDB fields with Enhanced Analytics
     """
     logger.info(f"process_call_status_thread is : {bot_data}", bot_data)
     _id = bot_data.get("_id")
@@ -1291,24 +1585,53 @@ def process_call_status_thread(bot_data):
                 callEndTime = converted_fields.get("callEndTime", "")
             except Exception as e:
                 logger.error(f"Exception in date conversion :: {e} - {sender_id}")
+                callStartTime = ""
+                callConnectedTime = ""
+                callEndTime = ""
+            
+            # Initialize closure analytics with defaults
+            closure_reason = "Not Specified"
+            closure_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+            partial_amount_agreed = 0
+            payment_commitment_date = ""
             
             try:
                 conversation_log = bot_data.get('conversation_log', [])
                 stage_code = bot_data.get('STAGE_CODE', 'DSCN')
                 
-                # CLOSURE ANALYTICS - Extract key metrics (these fields exist in MongoDB)
-                closure_reason = extract_closure_reason(conversation_log)
-                closure_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
-                partial_amount_agreed = extract_partial_amount(conversation_log)
-                payment_commitment_date = extract_payment_commitment_date(conversation_log)
+                # CLOSURE ANALYTICS - Extract key metrics (only if conversation exists)
+                if conversation_log and len(conversation_log) > 0:
+                    closure_reason = extract_closure_reason(conversation_log)
+                    partial_amount_agreed = extract_partial_amount(conversation_log)
+                    payment_commitment_date = extract_payment_commitment_date(conversation_log)
+                    
+                    logger.info(f"Closure Analytics - Reason: {closure_reason}, Partial Amount: {partial_amount_agreed}, Commitment Date: {payment_commitment_date}, sender_id={sender_id}", bot_data)
+                else:
+                    # Handle calls with no conversation (RNR, BUSY, etc.)
+                    if stage_code in ["RNR"]:
+                        closure_reason = "No Answer"
+                    elif stage_code in ["BUSY"]:
+                        closure_reason = "Line Busy"
+                    elif stage_code in ["FAILED"]:
+                        closure_reason = "Call Failed"
+                    else:
+                        closure_reason = "Call Completed"
                 
+                if payment_commitment_date:
+                    # Convert "2025-09-20" to "September 20th, 2025"
+                    try:
+                        date_obj = datetime.strptime(payment_commitment_date, "%Y-%m-%d")
+                        formatted_date = date_obj.strftime("%B %d, %Y")  # "September 20, 2025"
+                        user_context['payment_commitment_date_formatted'] = formatted_date
+                    except:
+                        user_context['payment_commitment_date_formatted'] = payment_commitment_date
+                        
                 # Add closure analytics to bot_data
                 bot_data['closure_reason'] = closure_reason
                 bot_data['closure_time'] = closure_time
                 bot_data['partial_amount_agreed'] = partial_amount_agreed
                 bot_data['payment_commitment_date'] = payment_commitment_date
-                
-                logger.info(f"Closure Analytics - Reason: {closure_reason}, Partial Amount: {partial_amount_agreed}, Commitment Date: {payment_commitment_date}, sender_id={sender_id}", bot_data)
+                user_context['payment_commitment_date'] = payment_commitment_date
 
                 inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
                 sender_id = inya_call_status_dict.get("customerCRTId", "")
@@ -1363,6 +1686,16 @@ def process_call_status_thread(bot_data):
                 due_days = "0"
                 todays_date = datetime.now(IST).strftime("%Y-%m-%d")
                 
+                # Ensure closure analytics have defaults even on exception
+                if 'closure_reason' not in bot_data:
+                    bot_data['closure_reason'] = "System Error"
+                if 'closure_time' not in bot_data:
+                    bot_data['closure_time'] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+                if 'partial_amount_agreed' not in bot_data:
+                    bot_data['partial_amount_agreed'] = 0
+                if 'payment_commitment_date' not in bot_data:
+                    bot_data['payment_commitment_date'] = ""
+                
             inya_stage_code = bot_data.get('STAGE_CODE','')
             logger.info(f"we have STAGE_CODE in else block from inya as :: {inya_stage_code} sender_id={sender_id} ", bot_data)
             
@@ -1401,16 +1734,28 @@ def process_call_status_thread(bot_data):
             inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
             inya_call_status = inya_call_status_dict.get("callStatus", "")                
             
-            # Stage code logic
+            # Enhanced Stage code logic with closure reason mapping
             if setupTime == 0:
                 bot_data['STAGE_CODE'] = "RNR"
                 bot_data['call_status'] = "NO ANSWER"
+                if bot_data.get('closure_reason') == "Not Specified":
+                    bot_data['closure_reason'] = "No Answer - Call Not Connected"
             elif inya_stage_code == "RNR":
                 bot_data['STAGE_CODE'] = "RNR"
                 bot_data['call_status'] = "NO ANSWER"
+                if bot_data.get('closure_reason') == "Not Specified":
+                    bot_data['closure_reason'] = "No Answer"
             elif inya_call_status == "ANSWERED" and inya_stage_code == "RNR":
                 bot_data['STAGE_CODE'] = "DSCN"
                 bot_data['call_status'] = "ANSWERED"
+            elif inya_call_status in ["BUSY", "FAILED"]:
+                bot_data['STAGE_CODE'] = "RNR"
+                bot_data['call_status'] = inya_call_status
+                if bot_data.get('closure_reason') == "Not Specified":
+                    if inya_call_status == "BUSY":
+                        bot_data['closure_reason'] = "Line Busy"
+                    else:
+                        bot_data['closure_reason'] = "Call Failed"
             
             # Handle tempDate field (exists in MongoDB)
             tempDate = bot_data.get('tempDate', datetime.now().strftime("%d/%m/%Y"))
@@ -1437,8 +1782,8 @@ def process_call_status_thread(bot_data):
             updated_data["trigger_call"] = trigger_call
             
             # Add closure analytics to updated_data for database storage (these fields exist in MongoDB)
-            updated_data['closure_reason'] = bot_data.get('closure_reason', '')
-            updated_data['closure_time'] = bot_data.get('closure_time', '')
+            updated_data['closure_reason'] = bot_data.get('closure_reason', 'Not Specified')
+            updated_data['closure_time'] = bot_data.get('closure_time', datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"))
             updated_data['partial_amount_agreed'] = bot_data.get('partial_amount_agreed', 0)
             updated_data['payment_commitment_date'] = bot_data.get('payment_commitment_date', '')
             
@@ -1462,15 +1807,16 @@ def process_call_status_thread(bot_data):
             res_data_rep = mongo_db.mongo_file_count(col_type = "report", q1 = {"sender_id":sender_id}) 
             logger.info(f"{sender_id} has updating details as {res_data_rep}", bot_data)
 
-            # SMS logic for PTP stage codes
+            # Enhanced SMS logic for PTP stage codes (include partial payments)
             stage_code = bot_data["STAGE_CODE"]
             env = "prod"
-            if stage_code in ["PTP"] and env in ["prod"]:
+            if (stage_code in ["PTP"] or bot_data.get('partial_amount_agreed', 0) > 0 or bot_data.get('payment_commitment_date', '') != "") and env in ["prod"]:
                 try:
                     t1 = ThreadWithReturnValue(target=sms, args=(phone_number, bot_data))
                     t1.start()
                     sms_response = t1.join()
                     bot_data['sms_response'] = sms_response
+                    logger.info(f"SMS sent successfully for PTP/Commitment: {sender_id}")
                 except Exception as e:
                     sms_response = f"sms error --------------------> {e}"
                     logger.error(f"SMS error: {e}")
@@ -1479,6 +1825,11 @@ def process_call_status_thread(bot_data):
             inya_error = bot_data['STAGE_CODE']
             if inya_error in ["ERROR"]:
                 logger.info(f"inya_error sender id as {sender_id} --- {inya_error}", bot_data)
+                if bot_data.get('closure_reason') == "Not Specified":
+                    bot_data['closure_reason'] = "System Error"
+                    updated_data['closure_reason'] = "System Error"
+                    # Update the record again with error reason
+                    mongo_db.mongo_update(col_type = "input", record={'closure_reason': 'System Error'}, upd_cond = {"sender_id":sender_id})
                 
             # Insert to appropriate collection based on conditions
             if res_data_rep in ["", None, {}, False, 0] and inya_error not in ["ERROR"]:
@@ -1488,11 +1839,20 @@ def process_call_status_thread(bot_data):
                 logger.info(f"check logs | reject db ---- {res_report} ---- ", bot_data)
             
             logger.info(f"check logs | Call Status ---- DB updates {res_cust} | {res_report} ---- {sender_id}", bot_data)
+            logger.info(f"Final Closure Analytics: Reason={bot_data.get('closure_reason')}, Amount={bot_data.get('partial_amount_agreed')}, Date={bot_data.get('payment_commitment_date')}", bot_data)
             
     except Exception as e:
         logger.error(f"check logs | Call Status ---- Error in updating collections-----> {e}, {sender_id}", bot_data)
+        # Ensure closure analytics exist even in main exception
+        if 'closure_reason' not in bot_data:
+            bot_data['closure_reason'] = "System Exception"
+            bot_data['closure_time'] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+            bot_data['partial_amount_agreed'] = 0
+            bot_data['payment_commitment_date'] = ""
         
     return output_data
+
+#-----------------------------------------------------------------------------------------------------------------------------------#
 
 def get_requried_fields_to_update(bot_data):
     """Updated to include only MongoDB fields"""
