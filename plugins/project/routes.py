@@ -840,7 +840,7 @@ def initial_message(request: Request):
         due_date_eng = due_date_format(due_date, "english") if due_date else ""
         due_date_hin = due_date_format(due_date, "hindi") if due_date else ""
         
-        initial_msg = f"hello, I am {{agent_name}} calling from phone pay. Am I speaking with {{full_name}}?"
+        initial_msg = f"hello, I am {{{{agent_name}}}} calling from phone pay. Am I speaking with {{{{full_name}}}}?"
 
         # ONLY use variables that exist in your MongoDB
         user_context = {
