@@ -1544,13 +1544,17 @@ def process_call_status_thread(bot_data):
     
     output_data = {**bot_data}
     
-    callConnectedTime = bot_data["call_infra"]["call_status"]["callConnectedTime"]
-    if callConnectedTime in ["None", None, " ", ""]:
-        callConnectedTime = ""
-        bot_data['callConnectedTime'] = callConnectedTime
+    try:
+        callConnectedTime = bot_data["call_infra"]["call_status"]["callConnectedTime"]
+        if callConnectedTime in ["None", None, " ", ""]:
+            callConnectedTime = ""
+            bot_data['callConnectedTime'] = callConnectedTime
     
-    callConnectedTime_a = bot_data.get("callConnectedTime", "")
-    if callConnectedTime_a in ["None", None, " ", ""]:
+        callConnectedTime_a = bot_data.get("callConnectedTime", "")
+        if callConnectedTime_a in ["None", None, " ", ""]:
+            callConnectedTime = ""
+            bot_data['callConnectedTime'] = callConnectedTime
+    except:
         callConnectedTime = ""
         bot_data['callConnectedTime'] = callConnectedTime
         
@@ -1567,13 +1571,17 @@ def process_call_status_thread(bot_data):
             res_reject = mongo_db.mongo_insert(col_type = "reject", record = bot_data)
         
         else: 
-            infra = bot_data["call_infra"]["call_status"]
-            logger.info(f"we have inya infra as: {infra} , sender_id={sender_id}", bot_data)
-            
-            setupTime = bot_data["call_infra"]["call_status"]["setupTime"]
-            ringingTime = bot_data["call_infra"]["call_status"]["ringingTime"]
-            setupTime = int(setupTime)
-            ringingTime = int(ringingTime)
+            try:
+                infra = bot_data["call_infra"]["call_status"]
+                logger.info(f"we have inya infra as: {infra} , sender_id={sender_id}", bot_data)
+                
+                setupTime = bot_data["call_infra"]["call_status"]["setupTime"]
+                ringingTime = bot_data["call_infra"]["call_status"]["ringingTime"]
+                setupTime = int(setupTime)
+                ringingTime = int(ringingTime)
+            except:
+                setupTime = 0
+                ringingTime = 0
             
             logger.info(f"we have setup and ringing time as:: {setupTime}, {ringingTime} sender_id={sender_id} ", bot_data)
             
@@ -1599,6 +1607,9 @@ def process_call_status_thread(bot_data):
                 conversation_log = bot_data.get('conversation_log', [])
                 stage_code = bot_data.get('STAGE_CODE', 'DSCN')
                 
+                # EXTRACT user_context FIRST - BEFORE using it ✅
+                user_context = bot_data.get("user_context", {})
+                
                 # CLOSURE ANALYTICS - Extract key metrics (only if conversation exists)
                 if conversation_log and len(conversation_log) > 0:
                     closure_reason = extract_closure_reason(conversation_log)
@@ -1617,8 +1628,8 @@ def process_call_status_thread(bot_data):
                     else:
                         closure_reason = "Call Completed"
                 
+                # Format payment commitment date - NOW user_context is already defined ✅
                 if payment_commitment_date:
-                    # Convert "2025-09-20" to "September 20th, 2025"
                     try:
                         date_obj = datetime.strptime(payment_commitment_date, "%Y-%m-%d")
                         formatted_date = date_obj.strftime("%B %d, %Y")  # "September 20, 2025"
@@ -1634,11 +1645,8 @@ def process_call_status_thread(bot_data):
                 user_context['payment_commitment_date'] = payment_commitment_date
 
                 inya_call_status_dict = bot_data.get("call_infra", {}).get("call_status", {})
-                sender_id = inya_call_status_dict.get("customerCRTId", "")
+                sender_id = inya_call_status_dict.get("customerCRTId", sender_id)
                 call_status = inya_call_status_dict.get("callStatus", "")
-                
-                # Extract ONLY MongoDB fields from user_context
-                user_context = bot_data.get("user_context", {})
                 
                 # Direct MongoDB fields that exist in your database
                 full_name = user_context.get("full_name", "")
@@ -1668,6 +1676,7 @@ def process_call_status_thread(bot_data):
             except Exception as e:
                 logger.error(f"Exception in usercontext :: {e} - {sender_id}")
                 # Set default values if extraction fails
+                user_context = {}
                 full_name = ""
                 agent_name = "riya"
                 lender_name = "phonepe"
@@ -1762,7 +1771,10 @@ def process_call_status_thread(bot_data):
             bot_data['tempDate'] = tempDate
             
             # Clean unwanted fields
-            delete_unwanted_fields(bot_data)
+            try:
+                delete_unwanted_fields(bot_data)
+            except Exception as e:
+                logger.error(f"Exception in delete_unwanted_fields: {e}")
             
             try:
                 call_sequence_update(bot_data)
@@ -1770,14 +1782,24 @@ def process_call_status_thread(bot_data):
                 logger.error(f"Exception in call_sequence_update: {e}", bot_data)
             
             # Calculate next trigger logic
-            next_trigger_date, trigger_call = call_logic(bot_data)
-            logger.info(f"next_trigger_date and trigger_call = {next_trigger_date} :: {trigger_call} :: sender_id={sender_id} ", bot_data)
+            try:
+                next_trigger_date, trigger_call = call_logic(bot_data)
+                logger.info(f"next_trigger_date and trigger_call = {next_trigger_date} :: {trigger_call} :: sender_id={sender_id} ", bot_data)
+            except Exception as e:
+                logger.error(f"Exception in call_logic: {e}")
+                next_trigger_date = ""
+                trigger_call = False
           
             bot_data["next_trigger_date"] = next_trigger_date
             bot_data["trigger_call"] = trigger_call
             
             # Get fields to update with only MongoDB fields
-            updated_data = get_requried_fields_to_update(bot_data)
+            try:
+                updated_data = get_requried_fields_to_update(bot_data)
+            except Exception as e:
+                logger.error(f"Exception in get_requried_fields_to_update: {e}")
+                updated_data = {}
+                
             updated_data["next_trigger_date"] = next_trigger_date
             updated_data["trigger_call"] = trigger_call
             
@@ -1786,14 +1808,19 @@ def process_call_status_thread(bot_data):
             updated_data['closure_time'] = bot_data.get('closure_time', datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"))
             updated_data['partial_amount_agreed'] = bot_data.get('partial_amount_agreed', 0)
             updated_data['payment_commitment_date'] = bot_data.get('payment_commitment_date', '')
+            updated_data['sender_id'] = sender_id
             
             logger.info(f"updated_data is : {updated_data}", bot_data)
             bot_data.update(updated_data)
             logger.info(f"check logs | {bot_data} ---- ", bot_data)
             
             # Update MongoDB with only existing fields
-            res_cust = mongo_db.mongo_update(col_type = "input", record=updated_data, upd_cond = {"sender_id":sender_id})
-            logger.info(f"check logs | res_cust --- {res_cust} --{sender_id}--{phone_number}--- ", bot_data)
+            try:
+                res_cust = mongo_db.mongo_update(col_type = "input", record=updated_data, upd_cond = {"sender_id":sender_id})
+                logger.info(f"check logs | res_cust --- {res_cust} --{sender_id}--{phone_number}--- ", bot_data)
+            except Exception as e:
+                logger.error(f"MongoDB update failed: {e}")
+                res_cust = {"status": "error"}
             
             # Clean up _id field
             if "_id" in bot_data:
@@ -1804,11 +1831,15 @@ def process_call_status_thread(bot_data):
                 bot_data['tempDate'] = bot_data['call_date']
             
             # Check report data
-            res_data_rep = mongo_db.mongo_file_count(col_type = "report", q1 = {"sender_id":sender_id}) 
-            logger.info(f"{sender_id} has updating details as {res_data_rep}", bot_data)
+            try:
+                res_data_rep = mongo_db.mongo_file_count(col_type = "report", q1 = {"sender_id":sender_id}) 
+                logger.info(f"{sender_id} has updating details as {res_data_rep}", bot_data)
+            except Exception as e:
+                logger.error(f"mongo_file_count failed: {e}")
+                res_data_rep = 0
 
             # Enhanced SMS logic for PTP stage codes (include partial payments)
-            stage_code = bot_data["STAGE_CODE"]
+            stage_code = bot_data.get("STAGE_CODE", "")
             env = "prod"
             if (stage_code in ["PTP"] or bot_data.get('partial_amount_agreed', 0) > 0 or bot_data.get('payment_commitment_date', '') != "") and env in ["prod"]:
                 try:
@@ -1822,21 +1853,28 @@ def process_call_status_thread(bot_data):
                     logger.error(f"SMS error: {e}")
             
             # Handle error stage codes
-            inya_error = bot_data['STAGE_CODE']
+            inya_error = bot_data.get('STAGE_CODE', '')
             if inya_error in ["ERROR"]:
                 logger.info(f"inya_error sender id as {sender_id} --- {inya_error}", bot_data)
                 if bot_data.get('closure_reason') == "Not Specified":
                     bot_data['closure_reason'] = "System Error"
                     updated_data['closure_reason'] = "System Error"
                     # Update the record again with error reason
-                    mongo_db.mongo_update(col_type = "input", record={'closure_reason': 'System Error'}, upd_cond = {"sender_id":sender_id})
+                    try:
+                        mongo_db.mongo_update(col_type = "input", record={'closure_reason': 'System Error'}, upd_cond = {"sender_id":sender_id})
+                    except Exception as e:
+                        logger.error(f"Error updating closure reason: {e}")
                 
             # Insert to appropriate collection based on conditions
-            if res_data_rep in ["", None, {}, False, 0] and inya_error not in ["ERROR"]:
-                res_report = mongo_db.mongo_insert(col_type = "output", record = bot_data)
-            else:
-                res_report = mongo_db.mongo_insert(col_type = "reject", record = bot_data)
-                logger.info(f"check logs | reject db ---- {res_report} ---- ", bot_data)
+            try:
+                if res_data_rep in ["", None, {}, False, 0] and inya_error not in ["ERROR"]:
+                    res_report = mongo_db.mongo_insert(col_type = "output", record = bot_data)
+                else:
+                    res_report = mongo_db.mongo_insert(col_type = "reject", record = bot_data)
+                    logger.info(f"check logs | reject db ---- {res_report} ---- ", bot_data)
+            except Exception as e:
+                logger.error(f"MongoDB insert failed: {e}")
+                res_report = {"status": "error"}
             
             logger.info(f"check logs | Call Status ---- DB updates {res_cust} | {res_report} ---- {sender_id}", bot_data)
             logger.info(f"Final Closure Analytics: Reason={bot_data.get('closure_reason')}, Amount={bot_data.get('partial_amount_agreed')}, Date={bot_data.get('payment_commitment_date')}", bot_data)
@@ -1844,11 +1882,24 @@ def process_call_status_thread(bot_data):
     except Exception as e:
         logger.error(f"check logs | Call Status ---- Error in updating collections-----> {e}, {sender_id}", bot_data)
         # Ensure closure analytics exist even in main exception
-        if 'closure_reason' not in bot_data:
-            bot_data['closure_reason'] = "System Exception"
-            bot_data['closure_time'] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
-            bot_data['partial_amount_agreed'] = 0
-            bot_data['payment_commitment_date'] = ""
+        try:
+            if 'closure_reason' not in bot_data:
+                bot_data['closure_reason'] = "System Exception"
+                bot_data['closure_time'] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+                bot_data['partial_amount_agreed'] = 0
+                bot_data['payment_commitment_date'] = ""
+                
+            # Store error record
+            error_data = {
+                'sender_id': sender_id,
+                'closure_reason': 'System Exception',
+                'closure_time': datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+                'error_details': str(e),
+                'phone_number': phone_number
+            }
+            mongo_db.mongo_insert(col_type="output", record=error_data)
+        except:
+            pass
         
     return output_data
 
